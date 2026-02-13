@@ -1,0 +1,19 @@
+version: "3"
+
+silent: true
+
+tasks:
+  default:
+    desc: Setup the commit hooks.
+    summary: |
+      Setup the hooks.
+
+      This command will setup the commit hooks on the local environment.
+    sources:
+      - .pre-commit-config.yaml
+    generates:
+      - .git/hooks/pre-commit
+      - .git/hooks/commit-msg
+    cmds:
+      - pre-commit install --install-hooks
+      - pre-commit install --hook-type commit-msg
