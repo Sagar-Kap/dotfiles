@@ -127,18 +127,32 @@ nvm use --lts
 # Added to PATH explicitly -- non-interactive shell skips ~/.bashrc
 export PATH="/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin:$PATH"
 if command -v brew > /dev/null 2>&1; then
-    brew update
-    brew upgrade
-    brew cleanup
+    # Each brew step is guarded with `|| true` so a single broken upstream
+    # formula/cask definition (e.g. a cask shipped with a nil sha256) cannot
+    # abort the whole script via `set -e`.
+    #
+    # Formulae and casks are upgraded SEPARATELY on purpose: a bare
+    # `brew upgrade` evaluates every installed cask up front, so one invalid
+    # cask definition makes it error out before upgrading anything at all.
+    # Splitting them means a broken cask only blocks the cask step -- all
+    # outdated formulae still upgrade.
+    brew update || true
+    brew upgrade --formula || true
+    brew upgrade --cask || true
+    brew cleanup || true
 else
     echo "   Homebrew not found in WSL -- skipping brew update."
 fi
 '@
 
-# Write script to a temp file inside WSL, run it, then clean up
-$wslScript | wsl -d Ubuntu -- bash -c "tr -d '\r' > /tmp/wsl-update.sh && chmod +x /tmp/wsl-update.sh"
-wsl -d Ubuntu -- bash /tmp/wsl-update.sh
-wsl -d Ubuntu -- bash -c "rm /tmp/wsl-update.sh"
+# Write script to a temp file inside WSL, run it, then clean up.
+# --cd ~ starts each invocation in the Linux home directory. Without it WSL
+# tries to translate the launching Windows CWD (e.g. C:\updateWithPS) into
+# /mnt/c/updateWithPS and chdir there, which prints a harmless but noisy
+# "chdir(...) failed 5" (access denied) before falling back to home.
+$wslScript | wsl -d Ubuntu --cd ~ -- bash -c "tr -d '\r' > /tmp/wsl-update.sh && chmod +x /tmp/wsl-update.sh"
+wsl -d Ubuntu --cd ~ -- bash /tmp/wsl-update.sh
+wsl -d Ubuntu --cd ~ -- bash -c "rm /tmp/wsl-update.sh"
 
 
 # --- Ubuntu Release Check -----------------------------------------------------
@@ -149,7 +163,7 @@ wsl -d Ubuntu -- bash -c "rm /tmp/wsl-update.sh"
 
 Write-Host "`n==> Checking for new Ubuntu release..." -ForegroundColor Cyan
 
-$releaseCheck = wsl -d Ubuntu -- bash -c "sudo do-release-upgrade -c 2>&1"
+$releaseCheck = wsl -d Ubuntu --cd ~ -- bash -c "sudo do-release-upgrade -c 2>&1"
 
 if ($releaseCheck -match "New release") {
     Write-Host "!! A new Ubuntu release is available. Upgrade manually when ready:" -ForegroundColor Yellow
